@@ -1,6 +1,8 @@
 <?php
 
 /**
+ * @copyright 2014-2015 Sentora Project (http://www.sentora.org/) 
+ * Sentora is a GPL fork of the ZPanel Project whose original header follows:
  *
  * ZPanel - A Cross-Platform Open-Source Web Hosting Control panel.
  *
@@ -176,8 +178,8 @@ class module_controller extends ctrl_module
             if (sys_versions::ShowOSPlatformVersion() == 'Windows') {
                 if (ctrl_options::GetSystemOption('disable_hostsen') == 'false') {
                     // Lets add the hostname to the HOSTS file so that the server can view the domain immediately...
-                    @exec("C:/zpanel/bin/zpss/setroute.exe " . $domain . "");
-                    @exec("C:/zpanel/bin/zpss/setroute.exe www." . $domain . "");
+                    @exec("C:/Sentora/bin/zpss/setroute.exe " . $domain . "");
+                    @exec("C:/Sentora/bin/zpss/setroute.exe www." . $domain . "");
                 }
             }
             self::SetWriteApacheConfigTrue();
@@ -207,7 +209,7 @@ class module_controller extends ctrl_module
             self::$error = TRUE;
             return FALSE;
         }
-        // Check to see if the domain already exists in ZPanel somewhere and redirect if it does....
+        // Check to see if the domain already exists in Sentora somewhere and redirect if it does....
         $sql = "SELECT COUNT(*) FROM x_vhosts WHERE vh_name_vc=:domain AND vh_deleted_ts IS NULL";
         $numrows = $zdbh->prepare($sql);
         $numrows->bindParam(':domain', $domain);
@@ -229,7 +231,7 @@ class module_controller extends ctrl_module
             $part = explode('.', $domain);
             foreach ($part as $check) {
                 if (!in_array($check, $SharedDomains)) {
-                    if (strlen($check) > 3) {
+                    if (strlen($check) > 13) {
                         $sql = $zdbh->prepare("SELECT * FROM x_vhosts WHERE vh_name_vc LIKE :check AND vh_type_in !=2 AND vh_deleted_ts IS NULL");
                         $checkSql = '%' . $check . '%';
                         $sql->bindParam(':check', $checkSql);
@@ -411,14 +413,19 @@ class module_controller extends ctrl_module
 
     static function getDomainUsagepChart()
     {
-        $currentuser = ctrl_users::GetUserDetail();
-        $maximum = $currentuser['domainquota'];
-        if ($maximum < 0) { //-1 = unlimited
-            return '<img src="' . ui_tpl_assetfolderpath::Template() . 'img/misc/unlimited.png" alt="' . ui_language::translate('Unlimited') . '"/>';
+		global $controller;
+		$currentuser = ctrl_users::GetUserDetail();
+		$maximum = $currentuser['domainquota'];
+		if ($maximum < 0) { //-1 = unlimited
+            if (file_exists(ui_tpl_assetfolderpath::Template() . 'img/misc/unlimited.png')) {
+				return '<img src="' . ui_tpl_assetfolderpath::Template() . 'img/misc/unlimited.png" alt="' . ui_language::translate('Unlimited') . '"/>';
+			} else {
+				return '<img src="modules/' . $controller->GetControllerRequest('URL', 'module') . '/assets/unlimited.png" alt="' . ui_language::translate('Unlimited') . '"/>';
+			}
         } else {
             $used = ctrl_users::GetQuotaUsages('domains', $currentuser['userid']);
             $free = max($maximum - $used, 0);
-            return '<img src="etc/lib/pChart2/zpanel/z3DPie.php?score=' . $free . '::' . $used
+            return '<img src="etc/lib/pChart2/sentora/z3DPie.php?score=' . $free . '::' . $used
                     . '&labels=Free: ' . $free . '::Used: ' . $used
                     . '&legendfont=verdana&legendfontsize=8&imagesize=240::190&chartsize=120::90&radius=100&legendsize=150::160"'
                     . ' alt="' . ui_language::translate('Pie chart') . '"/>';

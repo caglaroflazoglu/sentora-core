@@ -1,6 +1,8 @@
 <?php
 
 /**
+ * @copyright 2014-2015 Sentora Project (http://www.sentora.org/)
+ * Sentora is a GPL fork of the ZPanel Project whose original header follows:
  *
  * ZPanel - A Cross-Platform Open-Source Web Hosting Control panel.
  *
@@ -31,6 +33,7 @@ class module_controller extends ctrl_module
     static $alreadyexists;
     static $blank;
     static $badname;
+    static $invalidPath;
     static $ok;
     static $delete;
     static $reset;
@@ -137,6 +140,21 @@ class module_controller extends ctrl_module
     {
         global $zdbh;
         global $controller;
+
+        // Verify if Current user can Edit FTP Account.
+        $currentuser = ctrl_users::GetUserDetail($uid);
+
+        $sql = "SELECT * FROM x_ftpaccounts WHERE ft_acc_fk=:userid AND ft_id_pk=:editedUsrID AND ft_deleted_ts IS NULL";
+        $numrows = $zdbh->prepare($sql);
+        $numrows->bindParam(':userid', $currentuser['userid']);
+        $numrows->bindParam(':editedUsrID', $ft_id_pk);
+        $numrows->execute();
+
+        if( $numrows->rowCount() == 0 ) {
+            return;
+        }
+
+        // Change User Password
         runtime_hook::Execute('OnBeforeResetFTPPassword');
         $rowftpsql = "SELECT * FROM x_ftpaccounts WHERE ft_id_pk=:ftIdPk";
         $rowftpfind = $zdbh->prepare($rowftpsql);
@@ -165,6 +183,7 @@ class module_controller extends ctrl_module
         global $zdbh;
         global $controller;
         $currentuser = ctrl_users::GetUserDetail($uid);
+  $username = $currentuser['username'] . '_' . $username;
         runtime_hook::Execute('OnBeforeCreateFTPAccount');
         if (fs_director::CheckForEmptyValue(self::CheckForErrors($username, $password))) {
             // Check to see if its a new home directory or use a current one...
@@ -181,6 +200,18 @@ class module_controller extends ctrl_module
             } else {
                 $homedirectory_to_use = '/' . $destination;
             }
+
+            // Check if Path is inside user home directory.
+            $full_homeDir  = ctrl_options::GetSystemOption('hosted_dir') . $currentuser['username'] . $homedirectory_to_use . '/';
+            $baseDir       = ctrl_options::GetSystemOption('hosted_dir') . $currentuser['username'];
+            $realPath      = realpath($full_homeDir);
+
+            if( 0 !== strpos($realPath, $baseDir))
+            {
+                self::$invalidPath = true;
+                return false;
+            }
+
             $sql = $zdbh->prepare("INSERT INTO x_ftpaccounts (ft_acc_fk, ft_user_vc, ft_directory_vc, ft_access_vc, ft_password_vc, ft_created_ts) VALUES (:userid, :username, :homedir, :accesstype, :password, :time)");
             $sql->bindParam(':userid', $currentuser['userid']);
             $sql->bindParam(':username', $username);
@@ -231,13 +262,28 @@ class module_controller extends ctrl_module
 
     static function IsValidUserName($username)
     {
-        return preg_match('/^[a-z\d][a-z\d-]{0,62}$/i', $username) || preg_match('/-$/', $username) == 1;
+        return preg_match('/^[a-z\d_][a-z\d_-]{0,62}$/i', $username) || preg_match('/-$/', $username) == 1;
     }
 
-    static function ExecuteDeleteFTP($ft_id_pk)
+    static function ExecuteDeleteFTP($ft_id_pk, $uid)
     {
         global $zdbh;
         global $controller;
+
+        // Verify if Current user can Edit FTP Account.
+        $currentuser = ctrl_users::GetUserDetail($uid);
+
+        $sql = "SELECT * FROM x_ftpaccounts WHERE ft_acc_fk=:userid AND ft_id_pk=:editedUsrID AND ft_deleted_ts IS NULL";
+        $numrows = $zdbh->prepare($sql);
+        $numrows->bindParam(':userid', $currentuser['userid']);
+        $numrows->bindParam(':editedUsrID', $ft_id_pk);
+        $numrows->execute();
+
+        if( $numrows->rowCount() == 0 ) {
+            return;
+        }
+
+        // Delete User
         runtime_hook::Execute('OnBeforeDeleteFTPAccount');
         $rowftpsql = "SELECT * FROM x_ftpaccounts WHERE ft_id_pk=:ftIdPk";
         $rowftpfind = $zdbh->prepare($rowftpsql);
@@ -348,17 +394,53 @@ class module_controller extends ctrl_module
         return !isset($urlvars['show']);
     }
 
-    static function getisDeleteFTP()
+    static function getisDeleteFTP($uid)
     {
         global $controller;
+        global $zdbh;
+
         $urlvars = $controller->GetAllControllerRequests('URL');
+
+        // Verify if Current user can Edit FTP Account.
+        // This shall avoid exposing ftp username based on ID lookups.
+        $currentuser = ctrl_users::GetUserDetail($uid);
+
+        $sql = " SELECT * FROM x_ftpaccounts WHERE ft_acc_fk=:userid AND ft_id_pk=:editedUsrID AND ft_deleted_ts IS NULL";
+        $numrows = $zdbh->prepare($sql);
+        $numrows->bindParam(':userid', $currentuser['userid']);
+        $numrows->bindParam(':editedUsrID', $urlvars['other']);
+        $numrows->execute();
+
+        if( $numrows->rowCount() == 0 ) {
+            return;
+        }
+
+        // Show User Info
         return (isset($urlvars['show'])) && ($urlvars['show'] == "Delete");
     }
 
-    static function getisEditFTP()
+    static function getisEditFTP($uid)
     {
         global $controller;
-        $urlvars = $controller->GetAllControllerRequests('URL');
+        global $zdbh;
+
+        $urlvars     = $controller->GetAllControllerRequests('URL');
+
+        // Verify if Current user can Edit FTP Account.
+        // This shall avoid exposing ftp username based on ID lookups.
+        $currentuser = ctrl_users::GetUserDetail($uid);
+
+        $sql = " SELECT * FROM x_ftpaccounts WHERE ft_acc_fk=:userid AND ft_id_pk=:editedUsrID AND ft_deleted_ts IS NULL";
+        $numrows = $zdbh->prepare($sql);
+        $numrows->bindParam(':userid', $currentuser['userid']);
+        $numrows->bindParam(':editedUsrID', $urlvars['other']);
+        $numrows->execute();
+
+        if( $numrows->rowCount() == 0 ) {
+            return;
+        }
+
+        // Show User Info
         return (isset($urlvars['show'])) && ($urlvars['show'] == "Edit");
     }
 
@@ -393,15 +475,19 @@ class module_controller extends ctrl_module
 
     static function getFTPUsagepChart()
     {
-        global $controller;
-        $currentuser = ctrl_users::GetUserDetail();
-        $maximum = $currentuser['ftpaccountsquota'];
-        if ($maximum < 0) { //-1 = unlimited
-            return '<img src="' . ui_tpl_assetfolderpath::Template() . 'img/misc/unlimited.png" alt="' . ui_language::translate('Unlimited') . '"/>';
+    global $controller;
+    $currentuser = ctrl_users::GetUserDetail();
+    $maximum = $currentuser['ftpaccountsquota'];
+    if ($maximum < 0) { //-1 = unlimited
+            if (file_exists(ui_tpl_assetfolderpath::Template() . 'img/misc/unlimited.png')) {
+        return '<img src="' . ui_tpl_assetfolderpath::Template() . 'img/misc/unlimited.png" alt="' . ui_language::translate('Unlimited') . '"/>';
+      } else {
+        return '<img src="modules/' . $controller->GetControllerRequest('URL', 'module') . '/assets/unlimited.png" alt="' . ui_language::translate('Unlimited') . '"/>';
+      }
         } else {
             $used = ctrl_users::GetQuotaUsages('ftpaccounts', $currentuser['userid']);
             $free = max($maximum - $used, 0);
-            return '<img src="etc/lib/pChart2/zpanel/z3DPie.php?score=' . $free . '::' . $used
+            return '<img src="etc/lib/pChart2/sentora/z3DPie.php?score=' . $free . '::' . $used
                     . '&labels=Free: ' . $free . '::Used: ' . $used
                     . '&legendfont=verdana&legendfontsize=8&imagesize=240::190&chartsize=120::90&radius=100&legendsize=150::160"'
                     . ' alt="' . ui_language::translate('Pie chart') . '"/>';
@@ -421,6 +507,9 @@ class module_controller extends ctrl_module
         }
         if (!fs_director::CheckForEmptyValue(self::$badname)) {
             return ui_sysmessage::shout(ui_language::translate("Your ftp account name is not valid. Please enter a valid ftp account name."), "zannounceerror");
+        }
+        if (!fs_director::CheckForEmptyValue(self::$invalidPath)) {
+            return ui_sysmessage::shout(ui_language::translate("Invalid Folder."), "zannounceok");
         }
         if (!fs_director::CheckForEmptyValue(self::$ok)) {
             return ui_sysmessage::shout(ui_language::translate("FTP accounts updated successfully."), "zannounceok");

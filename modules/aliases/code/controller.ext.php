@@ -1,6 +1,8 @@
 <?php
 
 /**
+ * @copyright 2014-2015 Sentora Project (http://www.sentora.org/) 
+ * Sentora is a GPL fork of the ZPanel Project whose original header follows:
  *
  * ZPanel - A Cross-Platform Open-Source Web Hosting Control panel.
  *
@@ -30,6 +32,7 @@ class module_controller extends ctrl_module
     static $ok;
     static $alreadyexists;
     static $validemail;
+    static $validdomain;
     static $noaddress;
     static $delete;
     static $create;
@@ -115,29 +118,30 @@ class module_controller extends ctrl_module
             return false;
         }
     }
-
-    static function getDomainList($uid = null)
+    
+    /**
+     * Produces a list of domain names only.
+     * @global db_driver $zdbh
+     * @param int $uid
+     * @return boolean
+     */
+    static function getDomainList($uid)
     {
         global $zdbh;
-        global $controller;
-        if (($uid == '') || (empty($uid)) || ($uid == null)) {
-            $uid = ctrl_auth::CurrentUserID();
-        }
         $currentuser = ctrl_users::GetUserDetail($uid);
+        
         $sql = "SELECT * FROM x_vhosts WHERE vh_acc_fk=:userid AND vh_enabled_in=1 AND vh_deleted_ts IS NULL ORDER BY vh_name_vc ASC";
-        $numrows = $zdbh->prepare($sql);
-        $numrows->bindParam(':userid', $currentuser['userid']);
-        $numrows->execute();
-
-        if ($numrows->fetchColumn() <> 0) {
-            $sqlRun = $zdbh->prepare($sql);
-            $sqlRun->bindParam(':userid', $currentuser['userid']);
-            $res = array();
-            $sqlRun->execute();
-            while ($rowdomains = $sqlRun->fetch()) {
-                array_push($res, array('domain' => $rowdomains['vh_name_vc']));
+        $binds = array(':userid' => $currentuser['userid']);
+        $prepared = $zdbh->bindQuery($sql, $binds);
+        
+        $rows = $prepared->fetchAll(PDO::FETCH_ASSOC);
+        $return = array();
+        
+        if (count($rows) > 0) {
+            foreach ($rows as $row) {
+                $return[] = array('domain' => $row['vh_name_vc']);
             }
-            return $res;
+            return $return;
         } else {
             return false;
         }
@@ -152,6 +156,7 @@ class module_controller extends ctrl_module
             return false;
         }
         runtime_hook::Execute('OnBeforeCreateAlias');
+        $address = str_replace('*', '', $address);
         $fulladdress = $address . "@" . $domain;
         $destination = strtolower(str_replace(' ', '', $destination));
         self::$create = true;
@@ -221,6 +226,10 @@ class module_controller extends ctrl_module
             self::$validemail = true;
             return false;
         }
+        if(!self::IsValidDomain($domain)){
+            self::$validdomain = true;
+            return false;        
+        }
         $sql = "SELECT * FROM x_mailboxes WHERE mb_address_vc=:fulladdress AND mb_deleted_ts IS NULL";
         $numrows = $zdbh->prepare($sql);
         $numrows->bindParam(':fulladdress', $fulladdress);
@@ -271,10 +280,20 @@ class module_controller extends ctrl_module
 
     static function IsValidEmail($email)
     {
-        if (!preg_match('/^[a-z0-9]+([_\\.-][a-z0-9]+)*@([a-z0-9]+([\.-][a-z0-9]+)*)+\\.[a-z]{2,}$/i', $email)) {
+        if (!preg_match('/^([\*]|[a-z0-9]+([_\\.-][a-z0-9]+)*)@([a-z0-9]+([\.-][a-z0-9]+)*)+\\.[a-z]{2,}$/i', $email)) {
             return false;
         }
         return true;
+    }
+    
+    static function IsValidDomain($domain)
+    {
+         foreach(self::getDomainList() as $key => $checkDomain){
+            if(array_key_exists('domain', $checkDomain) && $checkDomain['domain'] == $domain){
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -293,7 +312,6 @@ class module_controller extends ctrl_module
         if (self::ExecuteCreateAlias($currentuser['userid'], $formvars['inAddress'], $formvars['inDomain'], $formvars['inDestination']))
             self::$ok = true;
         return true;
-        return false;
     }
 
     static function doDeleteAlias()
@@ -400,11 +418,15 @@ class module_controller extends ctrl_module
         $currentuser = ctrl_users::GetUserDetail();
         $maximum = $currentuser['forwardersquota'];
         if ($maximum < 0) { //-1 = unlimited
-            return '<img src="' . ui_tpl_assetfolderpath::Template() . 'img/misc/unlimited.png" alt="' . ui_language::translate('Unlimited') . '"/>';
+            if (file_exists(ui_tpl_assetfolderpath::Template() . 'img/misc/unlimited.png')) {
+				return '<img src="' . ui_tpl_assetfolderpath::Template() . 'img/misc/unlimited.png" alt="' . ui_language::translate('Unlimited') . '"/>';
+			} else {
+				return '<img src="modules/' . $controller->GetControllerRequest('URL', 'module') . '/assets/unlimited.png" alt="' . ui_language::translate('Unlimited') . '"/>';
+			}
         } else {
             $used = ctrl_users::GetQuotaUsages('forwarders', $currentuser['userid']);
             $free = max($maximum - $used, 0);
-            return '<img src="etc/lib/pChart2/zpanel/z3DPie.php?score=' . $free . '::' . $used
+            return '<img src="etc/lib/pChart2/sentora/z3DPie.php?score=' . $free . '::' . $used
                     . '&labels=Free: ' . $free . '::Used: ' . $used
                     . '&legendfont=verdana&legendfontsize=8&imagesize=240::190&chartsize=120::90&radius=100&legendsize=150::160"'
                     . ' alt="' . ui_language::translate('Pie chart') . '"/>';
@@ -428,6 +450,9 @@ class module_controller extends ctrl_module
         }
         if (!fs_director::CheckForEmptyValue(self::$noaddress)) {
             return ui_sysmessage::shout(ui_language::translate("Your email address cannot be blank."), "zannounceerror");
+        }
+        if (!fs_director::CheckForEmptyValue(self::$validdomain)) {
+            return ui_sysmessage::shout(ui_language::translate("The selected domain was not valid or not yet active."), "zannounceerror");
         }
         if (!fs_director::CheckForEmptyValue(self::$ok)) {
             return ui_sysmessage::shout(ui_language::translate("Changes to your aliases have been saved successfully!"), "zannounceok");

@@ -1,3 +1,4 @@
+<@ Init @>
 <div class="zmodule_content panel" id="zmodule_header_<@ ModuleName @>">
     <div class="panel-heading">
         <img src="<@ ModuleIcon @>" width="35" height="35" border="0" alt="<@ ModuleName @>">
@@ -27,5 +28,4 @@
             <@ CSFR_Tag @>
         </form>
     </div>
-
 </div>

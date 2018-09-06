@@ -43,7 +43,7 @@
                 </tr>
                 <tr>
                     <th><: New password :>:</th>
-                    <td><input name="inPassword" type="text" id="input-password" size="30" /></td>
+                    <td><input name="inPassword" type="text" id="input-password" size="30" maxlength="50" /></td>
                     <td><button class="button-loader btn btn-default" type="submit" name="inReset" id="button" value="<@ EditCurrentID @>"><: Reset Password :>
                         </button>
                         <button class="button-loader btn btn-default" type="button" onclick="window.location.href='./?module=ftp_management';return false;"><: Cancel :></button></td>
@@ -64,19 +64,26 @@
         <% if ClientList %>
         <form action="./?module=ftp_management&action=EditFTP" method="post">
             <table class="table table-striped">
+				<colgroup>
+					<col>
+					<col>
+					<col>
+					<col>
+					<col>
+				</colgroup>
                 <tr>
                     <th><: Account name :></th>
                     <th><: Home directory :></th>
                     <th><: Permission :></th>
                     <th><: Password :></th>
-                    <th></th>
+                    <th><button class="button btn btn-default" id="btn_sh">Show Passwords</button></th>
                 </tr>
                 <% loop ClientList %>
                 <tr>
                     <td><& username &></td>
                     <td><& directory &></td>
                     <td><& access &></td>
-                    <td><& password &></td>
+                    <td><span class="passRow" style="visibility: collapse"><& password &></span></td>
                     <td>
                         <button class="button-loader btn btn-default" type="submit" name="inReset_<& id &>" id="button" value="inReset_<& id &>"><: Reset Password :></button>
                         <button class="button-loader delete btn btn-danger" type="submit" name="inDelete_<& id &>" id="button" value="inDelete_<& id &>"><: Delete :></button>
@@ -102,11 +109,11 @@
                         <table class="table table-striped">
                             <tr>
                                 <th nowrap="nowrap"><: Username :>:</th>
-                                <td><input name="inFTPUsername" type="text" id="inFTPUsername" size="30" value="" maxlength="32"/></td>
+                                <td><# ui_tpl_username #>_<input name="inFTPUsername" type="text" id="inFTPUsername" size="30" value="" maxlength="50"/></td>
                             </tr>
                             <tr>
                                 <th><: Password :>:</th>
-                                <td><input name="inPassword" type="password" id="inPassword" size="30" /></td>
+                                <td><input name="inPassword" type="password" id="inPassword" size="30" maxlength="50" /></td>
                             </tr>
                             <tr>
                                 <th nowrap="nowrap"><: Access type :>:</th>
@@ -215,6 +222,7 @@
         }
     });
     $(document).ready(function() {
+		var ShowPass = false;
         $('.link-password').click(function(e){
             linkId = $(this).attr('id');
             if (linkId == 'generate'){
@@ -223,5 +231,22 @@
             }
             e.preventDefault();
         });
+		$('#btn_sh').click(function(e){
+		  if (!ShowPass)
+		  { 
+			  $('.passRow').css({'visibility': 'visible'});
+			  $('#btn_sh').innerHTML = 'Hide passwords';
+			  ShowPass = true;
+		  }
+		  else 
+		  {
+			  $('.passRow').css({'visibility': 'collapse'});
+			  $('#btn_sh').innerHTML = 'Show passwords';
+			  ShowPass = false;
+		  }
+		  e.preventDefault();
+		});
+		
+	  
     });
 </script>
