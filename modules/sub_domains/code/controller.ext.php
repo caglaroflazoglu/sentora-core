@@ -180,6 +180,7 @@ class module_controller extends ctrl_module
                 fs_filehandler::CopyFileSafe(ctrl_options::GetSystemOption('static_dir') . "pages/welcome.html", $vhost_path . "/index.html");
             }
             // If all has gone well we need to now create the domain in the database...
+	
             $sql = $zdbh->prepare("INSERT INTO x_vhosts (vh_acc_fk,
 														 vh_name_vc,
 														 vh_directory_vc,
@@ -278,7 +279,8 @@ class module_controller extends ctrl_module
     
     static function IsValidDomain($domain)
     {
-         foreach(self::ListDomains() as $key => $checkDomain){
+         $currentuser = ctrl_users::GetUserDetail();
+         foreach(self::ListDomains($currentuser['userid']) as $key => $checkDomain){
             if(array_key_exists('name', $checkDomain) && $checkDomain['name'] == $domain){
                 return true;
             }
